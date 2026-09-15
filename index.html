@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Audio Editor's Glue: Room Tone</title>
+    <style>
+        :root {
+            --bg-dark: #121212;
+            --panel-bg: #2a2a2a;
+            --track-bg: #1e1e1e;
+            --clip-dialogue: #3498db;
+            --clip-roomtone: #9b59b6;
+            --text-main: #ecf0f1;
+            --text-muted: #95a5a6;
+            --playhead: #e74c3c;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #fff;
+            display: flex;
+            justify-content: center;
+            margin: 20px;
+        }
+
+        .editor-widget {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            padding: 30px;
+            border-radius: 8px;
+            max-width: 700px;
+            width: 100%;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            border: 1px solid #333;
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 25px;
+        }
+
+        .header h3 {
+            margin: 0 0 10px 0;
+            font-size: 1.6rem;
+            color: #fff;
+        }
+
+        .header p {
+            margin: 0;
+            font-size: 0.95rem;
+            color: var(--text-muted);
+        }
+
+        /* Timeline / Tracks */
+        .timeline-container {
+            position: relative;
+            background-color: var(--panel-bg);
+            padding: 20px 10px;
+            border-radius: 6px;
+            margin-bottom: 20px;
+        }
+
+        .track {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+            height: 60px;
+            position: relative;
+            background-color: var(--track-bg);
+            border: 1px inset #111;
+            border-radius: 4px;
+        }
+
+        .track:last-child {
+            margin-bottom: 0;
+        }
+
+        .track-label {
+            width: 120px;
+            padding: 0 10px;
+            font-size: 0.85rem;
+            font-weight: bold;
+            color: var(--text-muted);
+            border-right: 2px solid #333;
+            z-index: 2;
+        }
+
+        .track-area {
+            flex-grow: 1;
+            position: relative;
+            height: 100%;
+        }
+
+        /* Audio Clips */
+        .clip {
+            position: absolute;
+            height: 80%;
+            top: 10%;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: bold;
+            color: rgba(255,255,255,0.9);
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.3);
+            border: 1px solid rgba(255,255,255,0.2);
+        }
+
+        .clip-d1 { left: 5%; width: 35%; background-color: var(--clip-dialogue); }
+        .clip-d2 { left: 60%; width: 35%; background-color: var(--clip-dialogue); }
+        
+        .clip-rt { 
+            left: 40%; 
+            width: 20%; 
+            background-color: var(--clip-roomtone); 
+            opacity: 0.2; /* Hidden by default */
+            transition: opacity 0.3s ease;
+        }
+
+        .clip-rt.active {
+            opacity: 1;
+        }
+
+        /* The Gap Highlight */
+        .the-gap {
+            position: absolute;
+            left: 40%;
+            width: 20%;
+            height: 100%;
+            background-color: rgba(231, 76, 60, 0.1);
+            border: 1px dashed var(--playhead);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: var(--playhead);
+            font-size: 0.75rem;
+            font-weight: bold;
+        }
+
+        /* Playhead */
+        .playhead {
+            position: absolute;
+            top: 0;
+            bottom: 0;
+            left: 5%;
+            width: 2px;
+            background-color: var(--playhead);
+            z-index: 10;
+            box-shadow: 0 0 5px var(--playhead);
+            transition: left linear;
+        }
+
+        .playhead::before {
+            content: '';
+            position: absolute;
+            top: -5px;
+            left: -5px;
+            width: 12px;
+            height: 12px;
+            background-color: var(--playhead);
+            border-radius: 50%;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--panel-bg);
+            padding: 20px;
+            border-radius: 6px;
+        }
+
+        .btn-play {
+            background-color: #2ecc71;
+            color: #121212;
+            border: none;
+            padding: 12px 25px;
+            font-size: 1rem;
+            font-weight: bold;
+            border-radius: 4px;
+            cursor: pointer;
+            text-transform: uppercase;
+            transition: background-color 0.2s;
+        }
+
+        .btn-play:hover {
+            background-color: #27ae60;
+        }
+
+        .btn-play:disabled {
+            background-color: #7f8c8d;
+            cursor: not-allowed;
+        }
+
+        /* Toggle Switch */
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            font-weight: bold;
+            font-size: 0.95rem;
+        }
+
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 28px;
+        }
+
+        .switch input { opacity: 0; width: 0; height: 0; }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #555;
+            transition: .4s;
+            border-radius: 34px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 20px; width: 20px;
+            left: 4px; bottom: 4px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider { background-color: var(--clip-roomtone); }
+        input:checked + .slider:before { transform: translateX(22px); }
+
+        #feedback-text {
+            text-align: center;
+            margin-top: 15px;
+            font-size: 0.95rem;
+            min-height: 20px;
+            color: #e74c3c;
+            font-weight: bold;
+        }
+    </style>
+</head>
+<body>
+
+<div class="editor-widget">
+    <div class="header">
+        <h3>The Audio Editor's "Glue"</h3>
+        <p>An editor removed a cough from the timeline, leaving a gap. Hit play to hear the jarring "digital zero." Then, apply Room Tone to hear how it fixes the edit!</p>
+    </div>
+
+    <div class="timeline-container">
+        <!-- The moving playhead -->
+        <div class="playhead" id="playhead"></div>
+        
+        <!-- Track 1: Dialogue -->
+        <div class="track">
+            <div class="track-label">Dialogue Track</div>
+            <div class="track-area">
+                <div class="clip clip-d1">Take 1 (With baked-in noise)</div>
+                <div class="the-gap" id="gap-warning">DIGITAL ZERO</div>
+                <div class="clip clip-d2">Take 2 (With baked-in noise)</div>
+            </div>
+        </div>
+
+        <!-- Track 2: Room Tone -->
+        <div class="track">
+            <div class="track-label">Room Tone Track</div>
+            <div class="track-area">
+                <div class="clip clip-rt" id="rt-clip">Room Tone Fill</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="controls">
+        <button class="btn-play" id="play-btn" onclick="playTimeline()">Play Timeline</button>
+        
+        <div class="toggle-container">
+            <span>Apply Room Tone Patch</span>
+            <label class="switch">
+                <input type="checkbox" id="rt-toggle" onchange="toggleVisuals()">
+                <span class="slider"></span>
+            </label>
+        </div>
+    </div>
+
+    <div id="feedback-text">Currently experiencing artificially "dead" space.</div>
+</div>
+
+<script>
+    let audioCtx;
+    const TOTAL_DURATION = 5; // seconds
+    const GAP_START = 2.0; // The cough was at 2 seconds
+    const GAP_END = 3.0;   // The next dialogue starts at 3 seconds
+
+    function initAudio() {
+        if (!audioCtx) {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        }
+    }
+
+    // Helper: Creates ambient baseline sound (Room Tone)
+    // We use a lowpass filter on white noise to create a realistic "room hum"
+    function createRoomTone(startTime, endTime) {
+        const bufferSize = audioCtx.sampleRate * (endTime - startTime);
+        const buffer = audioCtx.createBuffer(1, bufferSize, audioCtx.sampleRate);
+        const data = buffer.getChannelData(0);
+        for (let i = 0; i < bufferSize; i++) {
+            data[i] = Math.random() * 2 - 1; 
+        }
+        
+        const noise = audioCtx.createBufferSource();
+        noise.buffer = buffer;
+        
+        // Filter it to sound like a low, ambient room hum
+        const filter = audioCtx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 400; // Low frequency hum
+        
+        const gain = audioCtx.createGain();
+        gain.gain.value = 0.8; // Volume of the room tone
+        
+        noise.connect(filter);
+        filter.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        noise.start(startTime);
+        noise.stop(endTime);
+    }
+
+    // Helper: Creates a synthetic "talking" beep pattern
+    function createDialogue(startTime, duration) {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(440, startTime);
+        osc.frequency.setValueAtTime(660, startTime + (duration/2)); // Change pitch slightly
+        
+        gain.gain.setValueAtTime(0, startTime);
+        gain.gain.linearRampToValueAtTime(0.5, startTime + 0.05);
+        gain.gain.setValueAtTime(0.5, startTime + duration - 0.05);
+        gain.gain.linearRampToValueAtTime(0, startTime + duration);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        osc.start(startTime);
+        osc.stop(startTime + duration);
+    }
+
+    function toggleVisuals() {
+        const isRtOn = document.getElementById('rt-toggle').checked;
+        const rtClip = document.getElementById('rt-clip');
+        const gapWarning = document.getElementById('gap-warning');
+        const feedback = document.getElementById('feedback-text');
+
+        if (isRtOn) {
+            rtClip.classList.add('active');
+            gapWarning.style.opacity = '0';
+            feedback.style.color = '#9b59b6';
+            feedback.innerText = "Seamless! The Room Tone fills the gap effortlessly.";
+        } else {
+            rtClip.classList.remove('active');
+            gapWarning.style.opacity = '1';
+            feedback.style.color = '#e74c3c';
+            feedback.innerText = "Currently experiencing artificially 'dead' space.";
+        }
+    }
+
+    function playTimeline() {
+        initAudio();
+        const playBtn = document.getElementById('play-btn');
+        const playhead = document.getElementById('playhead');
+        const isRtOn = document.getElementById('rt-toggle').checked;
+        const currentTime = audioCtx.currentTime;
+
+        // Disable button during playback
+        playBtn.disabled = true;
+
+        // --- SCHEDULING AUDIO ---
+        
+        // 1. Dialogue Track: First Clip (0s to 2s)
+        // This includes the dialogue audio AND the baked-in room tone of the recording
+        createDialogue(currentTime, 1.8);
+        createRoomTone(currentTime, GAP_START); 
+        
+        // 2. The Gap (2s to 3s)
+        // The dialogue is cut out. 
+        // If Room Tone toggle is ON, we lay down room tone to fill it!
+        if (isRtOn) {
+            createRoomTone(currentTime + GAP_START, currentTime + GAP_END);
+        }
+
+        // 3. Dialogue Track: Second Clip (3s to 5s)
+        createDialogue(currentTime + GAP_END + 0.2, 1.6);
+        createRoomTone(currentTime + GAP_END, currentTime + TOTAL_DURATION);
+
+        // --- SCHEDULING VISUALS (Playhead Animation) ---
+        
+        // Reset playhead
+        playhead.style.transition = 'none';
+        playhead.style.left = '5%';
+        
+        // Force reflow
+        void playhead.offsetWidth; 
+        
+        // Animate across the screen (From 5% left margin to 95%)
+        playhead.style.transition = `left ${TOTAL_DURATION}s linear`;
+        playhead.style.left = '95%';
+
+        // Reset button after playback completes
+        setTimeout(() => {
+            playBtn.disabled = false;
+            playhead.style.transition = 'none';
+            playhead.style.left = '5%';
+        }, TOTAL_DURATION * 1000);
+    }
+</script>
+
+</body>
+</html>
